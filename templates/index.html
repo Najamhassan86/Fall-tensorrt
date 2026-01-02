@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fall Detection • Jetson TensorRT</title>
+
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg1:#070A12;
+      --bg2:#0B1224;
+      --card: rgba(255,255,255,.06);
+      --card2: rgba(255,255,255,.08);
+      --stroke: rgba(255,255,255,.10);
+      --muted: rgba(255,255,255,.65);
+      --text: rgba(255,255,255,.92);
+      --good:#2EE59D;
+      --warn:#FFC857;
+      --bad:#FF4D6D;
+      --accent:#7C5CFF;
+      --accent2:#00D4FF;
+      --shadow: 0 18px 50px rgba(0,0,0,.45);
+      --radius: 18px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(900px 420px at 12% 12%, rgba(124,92,255,.25), transparent 60%),
+        radial-gradient(900px 420px at 88% 18%, rgba(0,212,255,.20), transparent 55%),
+        radial-gradient(700px 380px at 50% 92%, rgba(46,229,157,.12), transparent 60%),
+        linear-gradient(180deg, var(--bg1), var(--bg2));
+      min-height:100vh;
+    }
+
+    .wrap{ max-width: 1200px; margin: 0 auto; padding: 26px 18px 60px; }
+
+    .topbar{
+      display:flex; gap:16px; align-items:center; justify-content:space-between;
+      padding:16px 16px;
+      border: 1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.04));
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .brand{ display:flex; align-items:center; gap:12px; }
+    .logo{
+      width:42px; height:42px; border-radius: 14px;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), rgba(255,255,255,.05)),
+                  linear-gradient(135deg, rgba(124,92,255,.9), rgba(0,212,255,.75));
+      border: 1px solid rgba(255,255,255,.18);
+      box-shadow: 0 14px 30px rgba(124,92,255,.22);
+    }
+    .title{ display:flex; flex-direction:column; line-height:1.1; }
+    .title b{ font-size: 15.5px; letter-spacing:.2px; }
+    .title span{ font-size: 12.5px; color: var(--muted); }
+
+    .actions{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border-radius: 999px;
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.05);
+      color: var(--muted);
+      font-size: 12.5px;
+      backdrop-filter: blur(10px);
+    }
+    .dot{ width:8px; height:8px; border-radius:999px; background: rgba(255,255,255,.35); }
+    .dot.good{ background: var(--good); }
+    .dot.warn{ background: var(--warn); }
+    .dot.bad{ background: var(--bad); }
+
+    .btn{
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor:pointer;
+      font-weight:600;
+      transition: transform .12s ease, background .12s ease, border-color .12s ease;
+      user-select:none;
+    }
+    .btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.18); }
+    .btn.primary{
+      border-color: rgba(124,92,255,.50);
+      background: linear-gradient(135deg, rgba(124,92,255,.95), rgba(0,212,255,.55));
+      box-shadow: 0 16px 30px rgba(124,92,255,.18);
+    }
+    .btn.danger{
+      border-color: rgba(255,77,109,.35);
+      background: rgba(255,77,109,.10);
+    }
+
+    .grid{
+      margin-top: 18px;
+      display:grid;
+      grid-template-columns: 1.35fr .85fr;
+      gap: 18px;
+    }
+    @media(max-width: 980px){
+      .grid{ grid-template-columns: 1fr; }
+      .actions{ justify-content:flex-start; }
+    }
+
+    .card{
+      border:1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.04));
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      overflow:hidden;
+    }
+    .card-h{
+      padding: 16px 16px 12px;
+      display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .card-h h2{ margin:0; font-size: 15px; }
+    .card-h p{ margin:6px 0 0; color: var(--muted); font-size: 12.5px; }
+    .card-b{ padding: 14px 16px 16px; }
+
+    .videoWrap{
+      position:relative;
+      border-radius: 16px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.25);
+    }
+    .videoWrap img{ width:100%; display:block; }
+    .overlayTop{
+      position:absolute; left:12px; top:12px; right:12px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      pointer-events:none;
+    }
+    .badgeRow{ display:flex; gap:8px; flex-wrap:wrap; }
+    .badge{
+      pointer-events:none;
+      display:inline-flex; align-items:center; gap:8px;
+      padding:7px 10px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.32);
+      font-size: 12px;
+      color: rgba(255,255,255,.85);
+      backdrop-filter: blur(10px);
+    }
+
+    .kv{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .kv .item{
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      border-radius: 14px;
+      padding: 10px 12px;
+    }
+    .kv .k{ font-size: 11.5px; color: var(--muted); }
+    .kv .v{ margin-top: 6px; font-weight: 700; letter-spacing:.2px; }
+
+    .drop{
+      border:1px dashed rgba(255,255,255,.18);
+      background: rgba(255,255,255,.04);
+      border-radius: 16px;
+      padding: 14px;
+    }
+    .drop .row{
+      display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    }
+    input[type="file"]{
+      width:100%;
+      padding: 10px;
+      border-radius: 12px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.22);
+      color: rgba(255,255,255,.80);
+      outline:none;
+    }
+
+    .muted{ color: var(--muted); font-size: 12.5px; }
+    .sep{ height:1px; background: rgba(255,255,255,.08); margin:14px 0; }
+
+    .toast{
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      max-width: 420px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.45);
+      color: rgba(255,255,255,.9);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 50px rgba(0,0,0,.45);
+      display:none;
+      z-index: 9999;
+    }
+
+    /* modal */
+    .modalBack{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.60);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      z-index: 9998;
+    }
+    .modal{
+      width: min(560px, 100%);
+      border-radius: 18px;
+      border:1px solid rgba(255,255,255,.14);
+      background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06));
+      box-shadow: 0 25px 70px rgba(0,0,0,.55);
+      backdrop-filter: blur(12px);
+      overflow:hidden;
+    }
+    .modal-h{
+      padding: 14px 14px 10px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .modal-h b{ font-size: 14px; }
+    .modal-b{ padding: 14px; }
+    .field{
+      margin-top: 10px;
+    }
+    .field label{
+      display:block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 7px;
+    }
+    .field input{
+      width: 100%;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.22);
+      color: rgba(255,255,255,.9);
+      outline:none;
+    }
+    .modalActions{
+      display:flex; gap:10px; justify-content:flex-end; margin-top: 14px; flex-wrap:wrap;
+    }
+
+    a { color: rgba(160,220,255,.95); text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo"></div>
+        <div class="title">
+          <b>Fall Detection • Jetson TensorRT</b>
+          <span>Live camera monitoring + offline processing • beautiful UI + dynamic alert receiver</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <div class="pill" title="Email config status">
+          <span id="emailDot" class="dot {{ 'good' if email_ok else 'warn' }}"></span>
+          <span id="emailState">{{ 'Email Ready' if email_ok else 'Email Not Ready' }}</span>
+        </div>
+
+        <div class="pill" title="Current alert receiver">
+          <span class="dot"></span>
+          <span id="alertToText">{{ alert_to if alert_to else 'Not set' }}</span>
+        </div>
+
+        <button class="btn" id="openSettings">Settings</button>
+        <a class="btn primary" href="/status" target="_blank">Open JSON Status</a>
+      </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="grid">
+      <!-- LIVE -->
+      <div class="card">
+        <div class="card-h">
+          <div>
+            <h2>Live Stream</h2>
+            <p>Real-time detection on camera feed • alerts when “Fall Confirmed” triggers.</p>
+          </div>
+
+          <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+            <button class="btn" id="btnTestEmail">Send Test Email</button>
+          </div>
+        </div>
+
+        <div class="card-b">
+          <div class="videoWrap">
+            <div class="overlayTop">
+              <div class="badgeRow">
+                <div class="badge">
+                  <span id="dotFall" class="dot"></span>
+                  <span id="txtFall">Fall: --</span>
+                </div>
+                <div class="badge">
+                  <span id="dotSit" class="dot"></span>
+                  <span id="txtSit">Sitting: --</span>
+                </div>
+                <div class="badge">
+                  <span id="dotAlert" class="dot"></span>
+                  <span id="txtAlert">Alert: --</span>
+                </div>
+              </div>
+
+              <div class="badge" title="Last update">
+                <span class="dot"></span>
+                <span id="txtTs">--</span>
+              </div>
+            </div>
+
+            <img src="/video_feed" alt="Live stream" />
+          </div>
+
+          <div class="kv">
+            <div class="item">
+              <div class="k">Camera</div>
+              <div class="v">{{ camera }}</div>
+            </div>
+            <div class="item">
+              <div class="k">Capture</div>
+              <div class="v">{{ cap_w }}×{{ cap_h }} @ {{ cap_fps }}fps</div>
+            </div>
+            <div class="item">
+              <div class="k">Model</div>
+              <div class="v">TensorRT Engine</div>
+            </div>
+            <div class="item">
+              <div class="k">Thresholds</div>
+              <div class="v">CONF {{ conf }} • NMS {{ iou_nms }}</div>
+            </div>
+          </div>
+
+          <div class="sep"></div>
+          <div class="muted">
+            Tip: Use <b>Settings</b> to change receiver email instantly, without restarting the app.
+          </div>
+        </div>
+      </div>
+
+      <!-- UPLOAD -->
+      <div class="card">
+        <div class="card-h">
+          <div>
+            <h2>Upload & Process</h2>
+            <p>Upload a video and generate an annotated output (.mp4).</p>
+          </div>
+        </div>
+
+        <div class="card-b">
+          <div class="drop">
+            <form action="/upload" method="post" enctype="multipart/form-data" id="uploadForm">
+              <div class="row">
+                <div style="flex:1; min-width: 220px;">
+                  <input type="file" name="video" accept="video/*" required />
+                  <div class="muted" style="margin-top:8px;">
+                    Best: short clips • keep resolution reasonable for speed.
+                  </div>
+                </div>
+                <button class="btn primary" type="submit">Process Video</button>
+              </div>
+            </form>
+          </div>
+
+          {% if out_url %}
+            <div class="sep"></div>
+            <div class="muted">Output preview</div>
+            <div style="margin-top:10px;">
+              <video src="{{ out_url }}" controls style="width:100%; border-radius:16px; border:1px solid rgba(255,255,255,.10); background: rgba(0,0,0,.25);"></video>
+              <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
+                <a class="btn" href="{{ out_url }}" target="_blank">Open Output</a>
+                <a class="btn primary" href="{{ out_url }}" download>Download</a>
+              </div>
+            </div>
+          {% endif %}
+
+          <div class="sep"></div>
+          <div class="muted">
+            Processing runs locally on Jetson using your TensorRT engine (same detector + logic pipeline).
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <!-- SETTINGS MODAL -->
+  <div class="modalBack" id="modalBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="modal-h">
+        <b>Alert Settings</b>
+        <button class="btn danger" id="closeSettings">Close</button>
+      </div>
+
+      <div class="modal-b">
+        <div class="muted">
+          Change where fall alerts are sent. This updates <b>settings.json</b> and applies immediately.
+        </div>
+
+        <div class="field">
+          <label>Receiver Email (ALERT_TO)</label>
+          <input id="alertToInput" placeholder="name@example.com" value="{{ alert_to }}" />
+        </div>
+
+        <div class="sep"></div>
+
+        <div class="muted">
+          SMTP Sender: <b>{{ smtp_user if smtp_user else 'Not set' }}</b><br/>
+          Email Status: <b id="emailOkText">{{ 'Ready' if email_ok else 'Not Ready' }}</b>
+        </div>
+
+        <div class="modalActions">
+          <button class="btn" id="btnRefreshSettings">Refresh</button>
+          <button class="btn primary" id="btnSaveSettings">Save Receiver</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const toastEl = document.getElementById("toast");
+    function toast(msg, ok=true){
+      toastEl.textContent = msg;
+      toastEl.style.display = "block";
+      toastEl.style.borderColor = ok ? "rgba(46,229,157,.35)" : "rgba(255,77,109,.35)";
+      setTimeout(()=> toastEl.style.display = "none", 2600);
+    }
+
+    // Modal
+    const modalBack = document.getElementById("modalBack");
+    document.getElementById("openSettings").onclick = ()=> modalBack.style.display = "flex";
+    document.getElementById("closeSettings").onclick = ()=> modalBack.style.display = "none";
+    modalBack.addEventListener("click", (e)=>{ if(e.target === modalBack) modalBack.style.display = "none"; });
+
+    // Status pills
+    const dotFall = document.getElementById("dotFall");
+    const dotSit = document.getElementById("dotSit");
+    const dotAlert = document.getElementById("dotAlert");
+    const txtFall = document.getElementById("txtFall");
+    const txtSit = document.getElementById("txtSit");
+    const txtAlert = document.getElementById("txtAlert");
+    const txtTs = document.getElementById("txtTs");
+
+    function setDot(el, state){
+      el.className = "dot";
+      if(state === "good") el.classList.add("good");
+      if(state === "warn") el.classList.add("warn");
+      if(state === "bad")  el.classList.add("bad");
+    }
+
+    async function pollStatus(){
+      try{
+        const r = await fetch("/status", {cache:"no-store"});
+        const j = await r.json();
+        const fall = !!j.fall_confirmed;
+        const sit  = !!j.sit_too_long;
+        const alrt = !!j.should_alert;
+
+        txtFall.textContent = "Fall: " + (fall ? "CONFIRMED" : "No");
+        txtSit.textContent  = "Sitting: " + (sit ? "TOO LONG" : "OK");
+        txtAlert.textContent= "Alert: " + (alrt ? "SENT" : "Idle");
+
+        setDot(dotFall, fall ? "bad" : "good");
+        setDot(dotSit,  sit  ? "warn" : "good");
+        setDot(dotAlert, alrt ? "bad" : "good");
+
+        if(j.ts){
+          const d = new Date(j.ts * 1000);
+          txtTs.textContent = "Updated: " + d.toLocaleTimeString();
+        } else {
+          txtTs.textContent = "Updated: --";
+        }
+      }catch(e){
+        // ignore transient errors
+      }
+    }
+    setInterval(pollStatus, 800);
+    pollStatus();
+
+    // Settings API
+    const emailDot = document.getElementById("emailDot");
+    const emailState = document.getElementById("emailState");
+    const alertToText = document.getElementById("alertToText");
+    const emailOkText = document.getElementById("emailOkText");
+    const alertToInput = document.getElementById("alertToInput");
+
+    function updateEmailUI(email_ok, alert_to){
+      emailDot.className = "dot " + (email_ok ? "good" : "warn");
+      emailState.textContent = email_ok ? "Email Ready" : "Email Not Ready";
+      emailOkText.textContent = email_ok ? "Ready" : "Not Ready";
+      alertToText.textContent = alert_to || "Not set";
+    }
+
+    async function refreshSettings(){
+      const r = await fetch("/settings", {cache:"no-store"});
+      const j = await r.json();
+      alertToInput.value = j.alert_to || "";
+      updateEmailUI(!!j.email_ok, j.alert_to || "");
+      return j;
+    }
+
+    document.getElementById("btnRefreshSettings").onclick = async ()=>{
+      try{
+        await refreshSettings();
+        toast("Settings refreshed ✅", true);
+      }catch(e){
+        toast("Failed to refresh settings", false);
+      }
+    };
+
+    document.getElementById("btnSaveSettings").onclick = async ()=>{
+      const email = (alertToInput.value || "").trim();
+      try{
+        const r = await fetch("/settings", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({alert_to: email})
+        });
+        const j = await r.json();
+        if(!r.ok){
+          toast(j.message || "Save failed", false);
+          return;
+        }
+        updateEmailUI(!!j.email_ok, j.alert_to || "");
+        toast("Receiver saved ✅", true);
+      }catch(e){
+        toast("Save failed", false);
+      }
+    };
+
+    // Test email
+    document.getElementById("btnTestEmail").onclick = async ()=>{
+      try{
+        const r = await fetch("/send_test_email", {method:"POST"});
+        const j = await r.json();
+        if(!r.ok){
+          toast(j.message || "Test failed", false);
+          return;
+        }
+        toast("Test email sent ✅", true);
+      }catch(e){
+        toast("Test failed", false);
+      }
+    };
+
+    // load settings once initially
+    refreshSettings().catch(()=>{});
+  </script>
+</body>
+</html>
+
