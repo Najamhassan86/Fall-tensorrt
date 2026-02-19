@@ -1,0 +1,35 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editor settings
+.vscode/
+.idea/
+
+# OS clutter
+.DS_Store
+Thumbs.db
+
+# Local data
+settings.json
+
+# Video files (keep large media out of git)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wmv
+*.flv
+*.mpeg
+
+# Large model/engine artifacts
+*.engine
+
+# Uploaded/generated assets
+uploads/
+outputs/
